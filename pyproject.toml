@@ -1,0 +1,24 @@
+[project]
+name = "literature"
+version = "0.1.0"
+description = "本地 PDF 文献管理工具 (lit)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=3.19.0",
+    "pydantic>=2.13.5",
+    "pymupdf>=1.28.2",
+    "python-dotenv>=1.2.3",
+    "rich>=13.0.0",
+    "typer>=0.27.2",
+]
+
+[project.scripts]
+lit = "literature.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/literature"]
