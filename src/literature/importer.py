@@ -27,9 +27,17 @@ def extract_pdf_pages(pdf_path: Path) -> Optional[list[str]]:
         return None
 
 
-def import_pdfs() -> None:
-    """扫描 inbox/ 中的 PDF，提取元数据并导入 papers/"""
+def import_pdfs(tag: Optional[str] = None) -> None:
+    """扫描 inbox/ 中的 PDF，提取元数据并导入 papers/
+
+    tag: 可选，为这批新导入的文献统一添加的标签；自动 trim，
+         空值（含仅空白）视为未指定。hash 重复或目录名冲突的
+         已导入文献也会合并该标签。
+    """
     storage.ensure_dirs()
+
+    # 清洗可选 tag：trim 首尾空白，strip 后为空则视为未指定
+    tag = (tag or "").strip() or None
 
     pdfs = sorted(storage.INBOX_DIR.glob("*.pdf"))
     if not pdfs:
@@ -49,7 +57,16 @@ def import_pdfs() -> None:
         # 1. hash 去重（与已导入文献 + 本批已导入的对比）
         file_hash = storage.file_sha256(pdf)
         if file_hash in known_hashes:
-            print(f"跳过重复文件（hash 已存在）: {pdf.name}\n")
+            if tag:
+                dup_dir = storage.paper_dir_by_hash(file_hash)
+                if dup_dir is not None:
+                    # 不是纯跳过：把新 tag 合并进已导入文献的 meta.json
+                    storage.add_tags(dup_dir, [tag])
+                    print(f"重复文件（hash 已存在），已将 tag '{tag}' 合并到: {dup_dir.name}\n")
+                else:
+                    print(f"跳过重复文件（hash 已存在）: {pdf.name}\n")
+            else:
+                print(f"跳过重复文件（hash 已存在）: {pdf.name}\n")
             skipped.append(pdf.name)
             continue
 
@@ -61,7 +78,7 @@ def import_pdfs() -> None:
             continue
         full_text = "\n".join(pages)
 
-        # 3. LLM 只读前 3 页提取元数据（不含 tags：tags 由手动编辑 meta.json 维护）
+        # 3. LLM 只读前 3 页提取元数据（tags 不由 LLM 生成，仅在 --tag 指定时写入）
         info = extract_publication_info("\n".join(pages[:FIRST_PAGES_FOR_LLM]))
         if info is None:
             print(f"错误：无法提取论文信息，文件保留在 inbox: {pdf.name}\n")
@@ -72,14 +89,19 @@ def import_pdfs() -> None:
         dirname = storage.build_dirname(info)
         target = storage.PAPERS_DIR / dirname
         if target.exists():
-            print(f"警告：目录已存在，跳过: {dirname}\n")
+            if tag:
+                # 目录名冲突：把新 tag 合并进已有文献的 meta.json
+                storage.add_tags(target, [tag])
+                print(f"警告：目录已存在，已将 tag '{tag}' 合并到: {dirname}\n")
+            else:
+                print(f"警告：目录已存在，跳过: {dirname}\n")
             skipped.append(pdf.name)
             continue
 
         target.mkdir(parents=True)
         shutil.move(str(pdf), target / "paper.pdf")
         (target / "paper.txt").write_text(full_text, encoding="utf-8")
-        storage.write_meta(target, info, file_hash)
+        storage.write_meta(target, info, file_hash, tags=[tag] if tag else None)
         known_hashes.add(file_hash)  # 本批内也去重
 
         print(f"导入成功: {dirname}\n")

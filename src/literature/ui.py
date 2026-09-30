@@ -28,14 +28,18 @@ def _paper_row(index: int, paper_dir: Path) -> tuple[str, str, str, str, str, st
     )
 
 
-def _paper_table(rows: list[tuple[str, str, str, str, str, str]]) -> Table:
+def _paper_table(
+    rows: list[tuple[str, str, str, str, str, str]], show_edge: bool = True
+) -> Table:
     """rich 表格：编号|年份|来源|第一作者|标题|tags
 
     box.MINIMAL 只画竖向分隔线，轻量且分组清晰；编号右对齐、青色。
+    show_edge=False 时去掉顶/底边框，使非 TTY（管道）输出每行即一条文献。
     """
     table = Table(
         show_header=False,
         box=box.MINIMAL,
+        show_edge=show_edge,
         pad_edge=False,
         expand=False,
         safe_box=False,
@@ -114,15 +118,16 @@ def _render_papers(rows: list[tuple[str, str, str, str, str, str]]) -> None:
         rows = [tuple(_truncate(c, fitted[i]) for i, c in enumerate(r)) for r in rows]
         Console(width=term_w).print(_paper_table(rows))
     else:
-        # 非 TTY：不截断，按内容宽度完整输出
+        # 非 TTY：不截断，按内容宽度完整输出；隐藏顶/底边框，使每行即一条文献
         req = sum(widths) + (len(widths) - 1) * 3 + 4
-        Console(width=req).print(_paper_table(rows))
+        Console(width=req).print(_paper_table(rows, show_edge=False))
 
 
 def print_paper_list(papers: list[Path]) -> None:
     """打印文献列表（全部论文一张大表：编号/年份/来源/作者/标题/tags）
 
-    编号取全局唯一编号：list_papers()（目录名排序）的 1-based 位置，\n    与 `lit read/note <数字>` 的序号解析共用同一排序（storage.paper_at_number）。
+    编号取全局唯一编号：list_papers()（目录名排序）的 1-based 位置，
+    与 `lit read/note <数字>` 的序号解析共用同一排序（storage.paper_at_number）。
     """
     if not papers:
         print("（没有匹配的文献）")
@@ -130,6 +135,31 @@ def print_paper_list(papers: list[Path]) -> None:
     global_index = {d: i + 1 for i, d in enumerate(storage.list_papers())}
     rows = [_paper_row(global_index[d], d) for d in papers]
     _render_papers(rows)
+
+
+def print_tag_list(tags: list[tuple[str, int]]) -> None:
+    """打印所有标签及文献数（tag | 数量）
+
+    TTY 下显示上下边框；管道/重定向时隐藏顶/底边框，每行一个标签，
+    便于 `lit tags | wc -l` 直接得到标签数。
+    """
+    if not tags:
+        print("（没有任何标签）")
+        return
+    table = Table(
+        show_header=False,
+        box=box.MINIMAL,
+        show_edge=sys.stdout.isatty(),
+        pad_edge=False,
+        expand=False,
+        safe_box=False,
+        padding=(0, 1),
+    )
+    table.add_column(style="cyan", no_wrap=True)  # tag
+    table.add_column(justify="right", no_wrap=True)  # 文献数
+    for tag, n in tags:
+        table.add_row(tag, str(n))
+    Console().print(table)
 
 
 def show_meta(paper_dir: Path) -> None:

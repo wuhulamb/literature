@@ -1,11 +1,13 @@
 """lit 命令行入口
 
 用法:
-  lit import                      # 将 inbox/ 中的文献导入
-  lit list                        # 列出所有文献（一张大表）
+  lit import [--tag TAG]         # 将 inbox/ 中的文献导入（可选统一添加标签）
+  lit list [--tag TAG]           # 列出所有文献（--tag 按标签筛选）
+  lit tags                        # 列出所有标签及对应文献数
   lit search [--year] [--source] [--author] [--keyword]
   lit read  PAPER                 # 查看 metadata 并尝试打开 PDF
   lit note PAPER                  # 编辑 notes.md
+  lit remove PAPER                # 删除已导入文献（不可逆）
 """
 
 from pathlib import Path
@@ -51,16 +53,32 @@ def resolve_paper(paper: str) -> Path:
 
 
 @app.command("import")
-def import_command() -> None:
+def import_command(
+    tag: Optional[str] = typer.Option(
+        None, "--tag", help="给本批导入的文献统一添加一个标签（可选；trim 后为空则不添加）"
+    ),
+) -> None:
     """将 inbox/ 中的 PDF 文献导入"""
-    import_pdfs()
+    import_pdfs(tag=tag)
 
 
 @app.command()
-def list() -> None:
-    """列出所有文献（一张大表，tags 列展示分类）"""
+def list(
+    tag: Optional[str] = typer.Option(
+        None, "--tag", help="只列出带有该 tag 的文献（精确匹配单个 tag，不区分大小写）"
+    ),
+) -> None:
+    """列出所有文献（一张大表，tags 列展示分类；--tag 按标签筛选）"""
     storage.ensure_dirs()
-    ui.print_paper_list(storage.list_papers())
+    papers = storage.filter_papers(tag=tag) if tag else storage.list_papers()
+    ui.print_paper_list(papers)
+
+
+@app.command()
+def tags() -> None:
+    """列出所有标签及对应文献数（按文献数降序）"""
+    storage.ensure_dirs()
+    ui.print_tag_list(storage.all_tags())
 
 
 @app.command()
@@ -93,6 +111,15 @@ def note(paper: str = typer.Argument(..., help="文献序号（lit list 显示�
     storage.ensure_dirs()
     paper_dir = resolve_paper(paper)
     ui.open_notes(paper_dir)
+
+
+@app.command()
+def remove(paper: str = typer.Argument(..., help="文献序号（lit list 显示的编号）或目录名/路径")) -> None:
+    """删除已导入文献所在目录（不可逆：paper.pdf/paper.txt/meta.json/notes.md 一并删除）"""
+    storage.ensure_dirs()
+    paper_dir = resolve_paper(paper)
+    storage.delete_paper(paper_dir)
+    typer.echo(f"已删除文献: {paper_dir.name}/")
 
 
 if __name__ == "__main__":

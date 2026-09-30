@@ -18,18 +18,22 @@ literature/
 
 ```bash
 uv sync                        # 安装依赖并注册 lit 命令
-export CHATECNU_API_KEY=...    # 或写入 .env（参考 .env 文件）
+export CHATECNU_API_KEY=...    # 或复制 .env.example 为 .env 并填入
 ```
 
 ## 命令
 
 ```bash
 lit import                                # 将 inbox/ 中的 PDF 导入
+lit import --tag 跨区域投资                # 导入，并为本批文献统一添加标签“跨区域投资”
 lit list                                  # 列出所有文献（一张大表，tags 列展示分类）
+lit list --tag 跨区域投资                  # 只列出带有标签“跨区域投资”的文献（序号与全局一致）
+lit tags                                  # 列出所有标签及对应文献数（按文献数降序）
 lit search --year 2017                    # 按年份精确筛选
 lit search --source NeurIPS               # 按来源（期刊/会议）精确筛选
 lit search --author Vaswani               # 按作者精确筛选
 lit search --keyword transformer          # 对标题/作者/来源/关键词包含匹配
 lit read PAPER                          # 打印 metadata + 尝试打开 paper.pdf
 lit note PAPER                          # 用 $EDITOR（默认 vim）编辑 notes.md
+lit remove PAPER                        # 删除已导入文献所在目录（不可逆）
 ```

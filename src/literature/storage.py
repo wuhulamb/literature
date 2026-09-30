@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -92,10 +93,13 @@ def load_meta(paper_dir: Path) -> Optional[dict]:
     return meta
 
 
-def write_meta(paper_dir: Path, info: PaperInfo, file_hash: str) -> None:
+def write_meta(
+    paper_dir: Path, info: PaperInfo, file_hash: str, tags: Optional[list[str]] = None
+) -> None:
     """写入 meta.json（唯一 metadata 来源，不含论文正文）
 
-    tags 不由 LLM 生成，由用户手动编辑 meta.json 维护，导入时置空。
+    tags 不由 LLM 生成：默认置空，可由 `lit import --tag` 提供初始标签，
+    之后由用户手动编辑 meta.json 维护（空数组=未分类）。
     """
     meta = {
         "year": info.year,
@@ -104,7 +108,7 @@ def write_meta(paper_dir: Path, info: PaperInfo, file_hash: str) -> None:
         "authors": info.authors,
         "first_author": info.authors[0] if info.authors else "unknown",
         "keywords": info.keywords,
-        "tags": [],  # 手动维护：编辑 meta.json 的 tags 数组即可，空数组=未分类
+        "tags": tags or [],  # 手动维护：编辑 meta.json 的 tags 数组即可，空数组=未分类
         "hash": file_hash,
         "imported_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -122,10 +126,47 @@ def existing_hashes() -> set[str]:
     return hashes
 
 
+def paper_dir_by_hash(file_hash: str) -> Optional[Path]:
+    """按 hash（含算法前缀）查找已导入论文目录，未找到返回 None"""
+    for d in list_papers():
+        meta = load_meta(d) or {}
+        if meta.get("hash") == file_hash:
+            return d
+    return None
+
+
+def add_tags(paper_dir: Path, tags: list[str]) -> None:
+    """向论文 meta.json 追加 tags（去重，保持已有顺序），并写回文件
+
+    tags 应为已清洗（trim 且非空）的标签列表；若 meta.json 不存在则忽略。
+    """
+    meta_path = paper_dir / "meta.json"
+    if not meta_path.exists():
+        return
+    with open(meta_path, encoding="utf-8") as f:
+        meta = json.load(f)
+    merged = [t for t in meta.get("tags", []) if t]
+    for t in tags:
+        if t not in merged:
+            merged.append(t)
+    meta["tags"] = merged
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
 def paper_tags(paper_dir: Path) -> list[str]:
-    """某篇论文的 tags（无 tags 字段时返回空列表）"""
+    """某篇论文的 tags（无 tags 字段时返回空列表；trim 后为空则忽略）"""
     meta = load_meta(paper_dir) or {}
-    return [t for t in meta.get("tags", []) if t]
+    return [t.strip() for t in meta.get("tags", []) if t.strip()]
+
+
+def all_tags() -> list[tuple[str, int]]:
+    """所有标签及出现次数，按出现次数降序、标签名升序排列"""
+    counts: dict[str, int] = {}
+    for d in list_papers():
+        for t in paper_tags(d):
+            counts[t] = counts.get(t, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
 
 
 def resolve_paper(identifier: str) -> Optional[Path]:
@@ -146,16 +187,25 @@ def resolve_paper(identifier: str) -> Optional[Path]:
     return None
 
 
+def delete_paper(paper_dir: Path) -> None:
+    """删除论文目录及其全部内容（paper.pdf / paper.txt / meta.json / notes.md，不可逆）"""
+    if not paper_dir.is_dir():
+        return
+    shutil.rmtree(paper_dir)
+
+
 def filter_papers(
     year: Optional[str] = None,
     source: Optional[str] = None,
     author: Optional[str] = None,
     keyword: Optional[str] = None,
+    tag: Optional[str] = None,
 ) -> list[Path]:
     """按条件筛选文献
 
     --year/--source/--author 精确筛选；--keyword 对 meta.json 的
-    title/source/authors/keywords 做包含匹配。
+    title/source/authors/keywords 做包含匹配；--tag 对 tags 列表做精确匹配（不区分大小写）。
+    返回结果按全局 list_papers() 排序，编号与 lit list 一致。
     """
     result: list[Path] = []
     for d in list_papers():
@@ -168,6 +218,10 @@ def filter_papers(
         if author:
             authors = [a.lower() for a in meta.get("authors", [])]
             if author.lower() not in authors:
+                continue
+        if tag:
+            tags = [t.lower() for t in paper_tags(d)]
+            if tag.lower() not in tags:
                 continue
         if keyword:
             k = keyword.lower()
