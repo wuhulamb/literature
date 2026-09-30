@@ -33,6 +33,7 @@ lit search --year 2017                    # 按年份精确筛选
 lit search --source NeurIPS               # 按来源（期刊/会议）精确筛选
 lit search --author Vaswani               # 按作者精确筛选
 lit search --keyword transformer          # 对标题/作者/来源/关键词包含匹配
+lit search --year 2021 --tag 跨区域投资    # 组合筛选：年份 + 标签
 lit read PAPER                          # 打印 metadata + 尝试打开 paper.pdf
 lit note PAPER                          # 用 $EDITOR（默认 vim）编辑 notes.md
 lit remove PAPER                        # 删除已导入文献所在目录（不可逆）

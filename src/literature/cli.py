@@ -4,7 +4,7 @@
   lit import [--tag TAG]         # 将 inbox/ 中的文献导入（可选统一添加标签）
   lit list [--tag TAG]           # 列出所有文献（--tag 按标签筛选）
   lit tags                        # 列出所有标签及对应文献数
-  lit search [--year] [--source] [--author] [--keyword]
+  lit search [--year] [--source] [--author] [--keyword] [--tag]
   lit read  PAPER                 # 查看 metadata 并尝试打开 PDF
   lit note PAPER                  # 编辑 notes.md
   lit remove PAPER                # 删除已导入文献（不可逆）
@@ -87,10 +87,11 @@ def search(
     source: Optional[str] = typer.Option(None, "--source", help="按来源精确筛选（期刊/会议）"),
     author: Optional[str] = typer.Option(None, "--author", help="按作者精确筛选"),
     keyword: Optional[str] = typer.Option(None, "--keyword", help="对标题/作者/来源/关键词做包含匹配"),
+    tag: Optional[str] = typer.Option(None, "--tag", help="按标签精确筛选（单个 tag，不区分大小写）"),
 ) -> None:
-    """搜索文献（year / source / author / keyword）"""
+    """搜索文献（year / source / author / keyword / tag）"""
     papers = storage.filter_papers(
-        year=year, source=source, author=author, keyword=keyword
+        year=year, source=source, author=author, keyword=keyword, tag=tag
     )
     typer.echo(f"匹配到 {len(papers)} 篇文献:")
     ui.print_paper_list(papers)
